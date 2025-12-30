@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Plus, Eye, Download, Edit2, Check, X } from 'lucide-react';
+import { ArrowLeft, Plus, Eye, Download, Edit2, Check, X, ScanLine } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import QuestionForm from "@/components/editor/question-form";
 import PreviewModal from "@/components/editor/preview-modal";
+import OCRModal from "@/components/editor/ocr-modal";
 import { generatePDF } from "@/lib/pdf-export";
 import { usePaper } from "@/context/paper-context";
 import { saveImage, getImage, deleteImage } from "@/lib/storage";
@@ -137,6 +138,7 @@ export default function EditorPage() {
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [showMCQDialog, setShowMCQDialog] = useState(false);
   const [showQuestionsDialog, setShowQuestionsDialog] = useState(false);
+  const [showOCRModal, setShowOCRModal] = useState(false);
   const [mcqConfig, setMcqConfig] = useState({ numQuestions: 1, marksEach: 1 });
   const [questionConfig, setQuestionConfig] = useState({ numQuestions: 1, marks: 1 });
   const [currentGroupForAdd, setCurrentGroupForAdd] = useState(null);
@@ -476,6 +478,26 @@ export default function EditorPage() {
     setQuestions(questions.filter((q) => q.id !== id));
   };
 
+  const handleOCRParsed = (parsedData) => {
+    // Create new question from OCR parsed data
+    const newQuestion = {
+      id: Date.now(),
+      type: parsedData.type, // 'mcq' or 'descriptive'
+      question: parsedData.question,
+      marks: parsedData.marks,
+      options: parsedData.type === 'mcq' ? parsedData.options : [],
+      answer: '',
+      subQuestions: parsedData.subQuestions || [],
+      imageId: parsedData.imageId || null,
+    };
+
+    // Add to questions list
+    setQuestions([...questions, newQuestion]);
+    
+    // Set editing to the new question so user can review/edit
+    setEditingId(newQuestion.id);
+  };
+
   const handleExportPDF = async (filename) => {
     try {
       setIsExporting(true);
@@ -531,6 +553,15 @@ export default function EditorPage() {
                 </SelectContent>
               </Select>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowOCRModal(true)}
+              className="gap-2"
+            >
+              <ScanLine className="w-4 h-4" />
+              Scan Question
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -1036,6 +1067,12 @@ export default function EditorPage() {
         questions={questions}
         onExport={handleExportPDF}
         isExporting={isExporting}
+      />
+
+      <OCRModal
+        open={showOCRModal}
+        onOpenChange={setShowOCRModal}
+        onQuestionParsed={handleOCRParsed}
       />
 
       <Dialog open={showMCQDialog} onOpenChange={setShowMCQDialog}>
