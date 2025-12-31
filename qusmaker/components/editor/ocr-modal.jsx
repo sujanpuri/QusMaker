@@ -4,16 +4,17 @@ import { useState, useRef, useEffect } from 'react'
 import { Camera, Upload, X, Loader2, CheckCircle, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { processImage, parseQuestionFromText } from '@/lib/ocr-service'
+import { processImage, processOCRText, getExtractionSummary } from '@/lib/ocr-service'
 import { saveImage } from '@/lib/storage'
 
 export default function OCRModal({ open, onOpenChange, onQuestionParsed }) {
-  const [step, setStep] = useState('select') // select, camera, processing, preview
+  const [step, setStep] = useState('select') // select, camera, processing, preview, summary
   const [capturedImage, setCapturedImage] = useState(null)
   const [imageFile, setImageFile] = useState(null)
   const [ocrProgress, setOcrProgress] = useState(0)
   const [ocrResult, setOcrResult] = useState(null)
-  const [parsedQuestion, setParsedQuestion] = useState(null)
+  const [extractedQuestions, setExtractedQuestions] = useState(null)
+  const [extractionSummary, setExtractionSummary] = useState('')
   const [error, setError] = useState(null)
   
   const videoRef = useRef(null)
@@ -35,7 +36,8 @@ export default function OCRModal({ open, onOpenChange, onQuestionParsed }) {
     setImageFile(null)
     setOcrProgress(0)
     setOcrResult(null)
-    setParsedQuestion(null)
+    setExtractedQuestions(null)
+    setExtractionSummary('')
     setError(null)
   }
 
@@ -112,35 +114,65 @@ export default function OCRModal({ open, onOpenChange, onQuestionParsed }) {
 
       setOcrResult(result)
 
-      // Parse question from OCR text
-      const parsed = parseQuestionFromText(result.text)
+      // Extract ALL questions from OCR text using new post-processing
+      const extraction = processOCRText(result.text)
       
-      if (!parsed) {
-        throw new Error('Could not parse question from image')
+      if (!extraction.success) {
+        throw new Error(extraction.error || 'Could not extract questions from image')
       }
 
-      setParsedQuestion(parsed)
-      setStep('preview')
+      if (extraction.totalQuestions === 0) {
+        throw new Error('No questions detected in the image. Please ensure the image contains clear question text.')
+      }
+
+      // Generate summary for user confirmation
+      const summary = getExtractionSummary(extraction)
+      
+      setExtractedQuestions(extraction)
+      setExtractionSummary(summary)
+      setStep('summary')
       
     } catch (err) {
-      console.error('OCR error:', err)
-      setError(err.message || 'Failed to process image. Please try again.')
+      console.error('❌ OCR Modal Error:', err);
+      
+      let errorMsg = err.message || 'Failed to process image. Please try again.';
+      
+      // Add helpful debugging info
+      if (!process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
+        errorMsg = 'API Key not found. Please create a .env.local file with NEXT_PUBLIC_GEMINI_API_KEY';
+      }
+      
+      setError(errorMsg);
       setStep('select')
     }
   }
 
   const handleConfirm = async () => {
-    if (parsedQuestion && imageFile) {
+    if (extractedQuestions && imageFile) {
       try {
         // Save image to IndexedDB
         const imageId = Date.now()
         await saveImage(imageId, imageFile)
         
-        // Pass parsed question with image ID to parent
-        onQuestionParsed({
-          ...parsedQuestion,
-          imageId: imageId
+        // Convert all extracted questions to editor format and pass to parent
+        const allQuestions = []
+        extractedQuestions.groups.forEach(group => {
+          group.questions.forEach(q => {
+            allQuestions.push({
+              type: q.questionType,
+              question: q.questionText,
+              marks: q.marks || 1,
+              options: q.options || [],
+              subQuestions: q.subQuestions || [],
+              imageId: imageId,
+              groupName: group.groupName,
+              questionNumber: q.questionNumber
+            })
+          })
         })
+        
+        // Pass all questions to parent (it should handle adding multiple questions)
+        onQuestionParsed(allQuestions)
         
         onOpenChange(false)
         resetState()
@@ -168,9 +200,16 @@ export default function OCRModal({ open, onOpenChange, onQuestionParsed }) {
         {error && (
           <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
-            <div>
+            <div className="flex-1">
               <p className="font-medium text-destructive">Error</p>
-              <p className="text-sm text-destructive/80">{error}</p>
+              <p className="text-sm text-destructive/80 mt-1">{error}</p>
+              <details className="mt-2">
+                <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">Show technical details</summary>
+                <div className="mt-2 p-2 bg-black/5 dark:bg-white/5 rounded text-xs font-mono">
+                  <p>Check browser console (F12) for detailed error logs</p>
+                  <p className="mt-1">API Key: {process.env.NEXT_PUBLIC_GEMINI_API_KEY ? '✓ Configured' : '✗ Not configured'}</p>
+                </div>
+              </details>
             </div>
           </div>
         )}
@@ -246,7 +285,7 @@ export default function OCRModal({ open, onOpenChange, onQuestionParsed }) {
               <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto" />
               <div>
                 <p className="font-semibold text-lg">Processing Image...</p>
-                <p className="text-sm text-muted-foreground">Extracting text from image</p>
+                <p className="text-sm text-muted-foreground">Extracting text with Gemini AI</p>
               </div>
               <div className="max-w-xs mx-auto">
                 <div className="h-2 bg-secondary rounded-full overflow-hidden">
@@ -261,8 +300,8 @@ export default function OCRModal({ open, onOpenChange, onQuestionParsed }) {
           </div>
         )}
 
-        {/* Step 4: Preview */}
-        {step === 'preview' && parsedQuestion && (
+        {/* Step 4: Summary - Show ALL extracted questions */}
+        {step === 'summary' && extractedQuestions && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Original Image */}
@@ -273,49 +312,74 @@ export default function OCRModal({ open, onOpenChange, onQuestionParsed }) {
                 </div>
               </div>
 
-              {/* Extracted Data */}
+              {/* Extraction Summary */}
               <div className="space-y-4">
-                <h3 className="font-semibold">Extracted Question</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold">Extracted Questions</h3>
+                  <div className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full text-sm font-medium">
+                    ✓ {extractedQuestions.totalQuestions} Question{extractedQuestions.totalQuestions !== 1 ? 's' : ''} Found
+                  </div>
+                </div>
                 
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">Question Type</label>
-                    <p className="mt-1 px-3 py-2 bg-secondary rounded-md capitalize">
-                      {parsedQuestion.type === 'mcq' ? 'Multiple Choice (MCQ)' : 'Descriptive'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">Question Text</label>
-                    <p className="mt-1 px-3 py-2 bg-secondary rounded-md">{parsedQuestion.question}</p>
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">Marks</label>
-                    <p className="mt-1 px-3 py-2 bg-secondary rounded-md">{parsedQuestion.marks}</p>
-                  </div>
-
-                  {parsedQuestion.type === 'mcq' && parsedQuestion.options.length > 0 && (
-                    <div>
-                      <label className="text-sm font-medium text-muted-foreground">Options</label>
-                      <div className="mt-1 space-y-2">
-                        {parsedQuestion.options.map((option, idx) => (
-                          <div key={idx} className="px-3 py-2 bg-secondary rounded-md">
-                            <span className="font-medium">{String.fromCharCode(97 + idx)}.</span> {option || '(empty)'}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                <div className="border rounded-lg p-4 bg-secondary/50 max-h-96 overflow-y-auto">
+                  <pre className="text-sm whitespace-pre-wrap font-mono">{extractionSummary}</pre>
                 </div>
 
-                {ocrResult && ocrResult.confidence < 80 && (
+                {ocrResult && ocrResult.confidence < 90 && (
                   <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
                     <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                      <strong>Low Confidence:</strong> OCR accuracy is {Math.round(ocrResult.confidence)}%. Please review the extracted text carefully.
+                      <strong>Note:</strong> Please review the extracted questions carefully to ensure accuracy.
                     </p>
                   </div>
                 )}
+              </div>
+            </div>
+
+            {/* Detailed Question List */}
+            <div className="space-y-3">
+              <h3 className="font-semibold text-lg">Question Details</h3>
+              <div className="space-y-4 max-h-96 overflow-y-auto border rounded-lg p-4">
+                {extractedQuestions.groups.map((group, groupIdx) => (
+                  <div key={groupIdx} className="space-y-3">
+                    {extractedQuestions.groups.length > 1 && (
+                      <div className="font-semibold text-primary border-b pb-2">
+                        📂 {group.groupName}
+                      </div>
+                    )}
+                    {group.questions.map((q, qIdx) => (
+                      <div key={qIdx} className="bg-secondary/30 rounded-lg p-4 space-y-2">
+                        <div className="flex items-start justify-between">
+                          <div className="font-medium">
+                            Q{q.questionNumber}: {q.questionType === 'mcq' ? '☑️ MCQ' : 
+                                                   q.questionType === 'short_question' ? '📝 Short Answer' :
+                                                   q.questionType === 'long_question' ? '📄 Long Answer' :
+                                                   '📋 Sub-Questions'}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {q.marks} mark{q.marks !== 1 ? 's' : ''}
+                          </div>
+                        </div>
+                        <p className="text-sm">{q.questionText}</p>
+                        
+                        {q.questionType === 'mcq' && q.options && q.options.length > 0 && (
+                          <div className="pl-4 space-y-1 text-sm">
+                            {q.options.map((opt, optIdx) => (
+                              opt && <div key={optIdx}>({String.fromCharCode(97 + optIdx)}) {opt}</div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {q.subQuestions && q.subQuestions.length > 0 && (
+                          <div className="pl-4 space-y-1 text-sm">
+                            {q.subQuestions.map((sub, subIdx) => (
+                              <div key={subIdx}>({sub.subQuestionId}) {sub.subQuestionText}</div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -325,7 +389,7 @@ export default function OCRModal({ open, onOpenChange, onQuestionParsed }) {
               </Button>
               <Button onClick={handleConfirm} className="gap-2">
                 <CheckCircle className="w-4 h-4" />
-                Looks Good - Add to Editor
+                Confirm - Add All {extractedQuestions.totalQuestions} Question{extractedQuestions.totalQuestions !== 1 ? 's' : ''} to Editor
               </Button>
             </div>
           </div>

@@ -479,23 +479,46 @@ export default function EditorPage() {
   };
 
   const handleOCRParsed = (parsedData) => {
-    // Create new question from OCR parsed data
-    const newQuestion = {
-      id: Date.now(),
-      type: parsedData.type, // 'mcq' or 'descriptive'
-      question: parsedData.question,
-      marks: parsedData.marks,
-      options: parsedData.type === 'mcq' ? parsedData.options : [],
-      answer: '',
-      subQuestions: parsedData.subQuestions || [],
-      imageId: parsedData.imageId || null,
-    };
-
-    // Add to questions list
-    setQuestions([...questions, newQuestion]);
+    // Handle both single question (legacy) and multiple questions (new)
+    const questionsToAdd = Array.isArray(parsedData) ? parsedData : [parsedData];
     
-    // Set editing to the new question so user can review/edit
-    setEditingId(newQuestion.id);
+    // Find the current group to add questions to
+    let targetGroupIndex = -1;
+    for (let i = questions.length - 1; i >= 0; i--) {
+      if (questions[i].type === 'group') {
+        targetGroupIndex = i;
+        break;
+      }
+    }
+    
+    // Create new questions from OCR parsed data
+    const newQuestions = questionsToAdd.map((data, index) => ({
+      id: Date.now() + index,
+      type: data.type || 'mcq',
+      question: data.question || '',
+      marks: data.marks || 1,
+      options: data.type === 'mcq' ? (data.options || []) : [],
+      answer: '',
+      subQuestions: data.subQuestions || [],
+      imageId: data.imageId || null,
+      groupName: data.groupName, // Store group info
+      questionNumber: data.questionNumber, // Store original question number
+    }));
+
+    // Insert new questions after the target group
+    if (targetGroupIndex !== -1) {
+      const updatedQuestions = [...questions];
+      updatedQuestions.splice(targetGroupIndex + 1, 0, ...newQuestions);
+      setQuestions(updatedQuestions);
+    } else {
+      // No group found, append to end
+      setQuestions([...questions, ...newQuestions]);
+    }
+    
+    // Set editing to the first new question so user can review/edit
+    if (newQuestions.length > 0) {
+      setEditingId(newQuestions[0].id);
+    }
   };
 
   const handleExportPDF = async (filename) => {
