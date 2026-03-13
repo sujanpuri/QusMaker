@@ -2,7 +2,6 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { useSession } from 'next-auth/react'
 import { Upload, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,7 +20,6 @@ import { validateQuestionPaperFormat, transformImportedData } from '@/lib/valida
 export default function JsonUploadModal({ open, onOpenChange }) {
   const router = useRouter()
   const { setCurrentPaper } = usePaper()
-  const { data: session } = useSession()
   const fileInputRef = useRef(null)
   
   const [error, setError] = useState('')
@@ -83,39 +81,6 @@ export default function JsonUploadModal({ open, onOpenChange }) {
     try {
       const paperData = transformImportedData(fileData)
       setCurrentPaper(paperData)
-      
-      // Log activity to database
-      if (session?.user) {
-        try {
-          const fileName = `${paperData.subject}_${paperData.className}_${paperData.term || 'Paper'}`.replace(/\s+/g, '_')
-          
-          console.log('Logging activity:', { fileName, session: session.user.email })
-          
-          const response = await fetch('/api/activity', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              action: 'imported',
-              fileName: fileName,
-              fileType: 'json',
-            }),
-          })
-          
-          const result = await response.json()
-          console.log('Activity API response:', result)
-          
-          if (!response.ok) {
-            console.error('Activity logging failed:', result)
-          }
-        } catch (activityError) {
-          console.error('Failed to log activity:', activityError)
-          // Don't block the import if activity logging fails
-        }
-      } else {
-        console.log('No session available for activity logging')
-      }
       
       // Reset state and close
       setFileData(null)

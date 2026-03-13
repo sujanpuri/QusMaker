@@ -1,29 +1,10 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
 import clientPromise from '@/lib/mongodb'
-import { authOptions } from '../auth/[...nextauth]/route'
 
 export async function POST(req: Request) {
-  console.log('Activity API called')
-  
   try {
-    // Get the session
-    const session = await getServerSession(authOptions)
-    
-    console.log('Session in activity API:', session?.user?.email || 'No session')
-    
-    if (!session || !session.user) {
-      console.log('Unauthorized: No session')
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
     const body = await req.json()
     const { action, fileName, fileType } = body
-    
-    console.log('Activity data:', { action, fileName, fileType })
 
     if (!action || !fileName) {
       return NextResponse.json(
@@ -48,24 +29,17 @@ export async function POST(req: Request) {
 
     // Create activity record
     const activity = {
-      userName: session.user.name || 'Unknown User',
-      userEmail: session.user.email,
-      userImage: session.user.image || null,
       action, // 'imported' or 'created'
       fileName,
       fileType: fileType || 'json',
       timestamp: now,
       time,
-      description: `${session.user.name || 'User'} ${action} the file "${fileName}" at ${time}`,
+      description: `User ${action} the file "${fileName}" at ${time}`,
     }
 
     // Save to database
     console.log('Inserting activity to database:', activity)
     const result = await activitiesCollection.insertOne(activity)
-    console.log('Activity inserted with ID:', result.insertedId)
-
-    console.log('Activity logged:', activity.description)
-
     return NextResponse.json({ 
       success: true, 
       message: 'Activity logged successfully' 

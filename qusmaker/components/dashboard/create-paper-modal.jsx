@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useSession } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -21,7 +20,6 @@ const DEFAULT_TERMS = ['1st Term', '2nd Term', '3rd Term', 'Final Term']
 export default function CreatePaperModal({ open, onOpenChange }) {
   const router = useRouter()
   const { setCurrentPaper } = usePaper()
-  const { data: session } = useSession()
   
   const [formData, setFormData] = useState({
     subject: '',
@@ -64,39 +62,6 @@ export default function CreatePaperModal({ open, onOpenChange }) {
       }
 
       setCurrentPaper(paperData)
-      
-      // Log activity to database
-      if (session?.user) {
-        try {
-          const fileName = `${paperData.subject}_${paperData.className}_${paperData.term}`.replace(/\s+/g, '_')
-          
-          console.log('Logging activity for new paper:', { fileName, session: session.user.email })
-          
-          const response = await fetch('/api/activity', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              action: 'created',
-              fileName: fileName,
-              fileType: 'new',
-            }),
-          })
-          
-          const result = await response.json()
-          console.log('Activity API response:', result)
-          
-          if (!response.ok) {
-            console.error('Activity logging failed:', result)
-          }
-        } catch (activityError) {
-          console.error('Failed to log activity:', activityError)
-          // Don't block the creation if activity logging fails
-        }
-      } else {
-        console.log('No session available for activity logging')
-      }
       
       // Reset form and close modal
       setFormData({ subject: '', className: '', term: '' })
