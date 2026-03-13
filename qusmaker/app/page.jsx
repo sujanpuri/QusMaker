@@ -1,11 +1,8 @@
-'use client'
-import { signIn, useSession } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { ArrowRight, Sparkles, Zap, Users, BarChart3 } from 'lucide-react'
 import Link from 'next/link'
 
 export default function Home() {
-  const {data: session} = useSession();
   return (
     <main className="min-h-screen bg-linear-to-br from-background via-background to-blue-50 dark:to-slate-900">
       {/* Navigation */}
@@ -17,13 +14,12 @@ export default function Home() {
             </div>
             <h1 className="text-xl font-bold text-foreground">Qus-Maker</h1>
           </div>
-          <Button 
-            onClick={() => signIn('google', {callbackUrl: '/dashboard'})} 
-            className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
-          >
-            Sign In
-            <ArrowRight className="w-4 h-4" />
-          </Button>
+          <Link href="/dashboard">
+            <Button className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground">
+              Go to Dashboard
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+          </Link>
         </div>
       </nav>
 
@@ -47,7 +43,7 @@ export default function Home() {
 
             {/* CTA Button */}
             <div className="flex flex-col sm:flex-row gap-4 pt-4">
-              <Link href="/signin">
+              <Link href="/dashboard">
                 <Button size="lg" className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground w-full sm:w-auto">
                   Get Started Free
                   <ArrowRight className="w-5 h-5" />
@@ -130,9 +126,9 @@ export default function Home() {
           <p className="text-lg text-primary-foreground/90 mb-8 max-w-2xl mx-auto">
             Join educators and creators building engaging learning experiences with Qus-Maker
           </p>
-          <Link href="/signin">
+          <Link href="/dashboard">
             <Button size="lg" className="gap-2 bg-primary-foreground hover:bg-primary-foreground/90 text-primary">
-              Sign In to Get Started
+              Get Started
               <ArrowRight className="w-5 h-5" />
             </Button>
           </Link>

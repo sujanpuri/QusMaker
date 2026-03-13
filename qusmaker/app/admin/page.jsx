@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -19,7 +18,6 @@ import {
 } from '@/components/ui/alert-dialog'
 
 export default function AdminPage() {
-  const { data: session, status } = useSession()
   const router = useRouter()
   const [isAdmin, setIsAdmin] = useState(false)
   const [isChecking, setIsChecking] = useState(true)
@@ -30,35 +28,10 @@ export default function AdminPage() {
   const [deleteDialog, setDeleteDialog] = useState({ open: false, user: null })
   const [promoteDialog, setPromoteDialog] = useState({ open: false, user: null, action: null })
 
-  // Check admin status
+  // Redirect to dashboard since authentication has been removed
   useEffect(() => {
-    async function checkAdmin() {
-      if (status === 'loading') return
-
-      if (status === 'unauthenticated') {
-        router.push('/dashboard')
-        return
-      }
-
-      try {
-        const response = await fetch('/api/admin/check')
-        const data = await response.json()
-
-        if (!data.isAdmin) {
-          router.push('/dashboard')
-          return
-        }
-
-        setIsAdmin(true)
-        setIsChecking(false)
-      } catch (error) {
-        console.error('Error checking admin status:', error)
-        router.push('/dashboard')
-      }
-    }
-
-    checkAdmin()
-  }, [status, router])
+    router.push('/dashboard')
+  }, [router])
 
   // Fetch users
   useEffect(() => {
@@ -165,9 +138,9 @@ export default function AdminPage() {
     })
   }
 
-  if (isChecking || status === 'loading') {
+  if (isChecking) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-secondary/5">
+      <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-background via-background to-secondary/5">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
           <p className="mt-4 text-muted-foreground">Checking permissions...</p>
@@ -181,7 +154,7 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/5">
+    <div className="min-h-screen bg-linear-to-br from-background via-background to-secondary/5">
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-4xl font-bold mb-2">Admin Panel</h1>
