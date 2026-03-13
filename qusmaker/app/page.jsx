@@ -18,7 +18,7 @@ export default function Home() {
             <h1 className="text-xl font-bold text-foreground">Qus-Maker</h1>
           </div>
           <Button 
-            onClick={() => signIn('google', {callbackUrl: '/dashboard'})} 
+            onClick={() => router.push("/dashboard")} 
             className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
           >
             Sign In
