@@ -14,12 +14,13 @@ export default function Home() {
             </div>
             <h1 className="text-xl font-bold text-foreground">Qus-Maker</h1>
           </div>
-          <Link href="/dashboard">
-            <Button className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground">
-              Go to Dashboard
-              <ArrowRight className="w-4 h-4" />
-            </Button>
-          </Link>
+          <Button 
+            onClick={() => signIn('google', {callbackUrl: '/dashboard'})} 
+            className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
+          >
+            Sign In
+            <ArrowRight className="w-4 h-4" />
+          </Button>
         </div>
       </nav>
 
